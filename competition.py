@@ -14,6 +14,10 @@ def print_planets(planets):
     print "%3d" % p.id, "%6.2f" % p.x, "%6.2f" % p.y, p.owner, "%4d" % p.ships, "%3d" % p.growth
 
 def main(argv):
+
+    stats = []
+    win_ctr=turns_ctr=r_ctr=counter=n_g=qv=qv_ctr=loss=0
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--collisions', action='store_true', required=False, default=False,
                         help="Should the ships collide with each other?")
@@ -27,8 +31,8 @@ def main(argv):
                         help="Planet number for player 2.")
     parser.add_argument('--nnum', type=int, required=False, default=21,
                         help="Number of neutral planets.")
-    parser.add_argument('--genmaps', action='store_true', required=False, default=False,
-                        help="Generate random maps.")
+    parser.add_argument('--genmaps', action='store_true', required=False, default=False, 
+                        help='Use generated maps.')
     parser.add_argument('--quiet', action='store_true', required=False, default=False,
                         help="Suppress all output to the console.")
 
@@ -56,7 +60,7 @@ def main(argv):
     time_totals = numpy.zeros((len(players)))    
 
     maps = []
-    
+    temp = 0
     for gn in range(arguments.games):
       n = gn+1
       state = State()
@@ -80,21 +84,29 @@ def main(argv):
         for i2,p2 in enumerate(players):
           if i2 >= i1:
             continue
+            
           pair = [players[i1], players[i2]]
+
           if map_name == None:
             game = PlanetWars(pair, planets=copy.deepcopy(state.planets), \
                               fleets=copy.deepcopy(state.fleets), collisions=arguments.collisions)
-            #print_planets(state.planets)
           else:
             game = PlanetWars(pair, map_name, collisions=arguments.collisions)
           
-          winner, ship_counts, turns, tt, tm = game.play()
+          winner, ship_counts, turns, tt, tm, reward, reward_e, counter, qv, qv_ctr, loss = game.play()
+
+          turns_ctr += turns
+          r_ctr+= reward          
           
+          print("DQN bot reward for game is {}".format(reward))
+          print("Another bot reward for game is {}".format(reward_e)) 
+  
           print "%-16s vs. %-16s winner= %d turns= %d" % (p1, p2, winner, turns)
           if winner == 0:
             res[i1][i2] += 0.5
             res[i2][i1] += 0.5
           elif winner == 1:
+            win_ctr += 1
             res[i1][i2] += 1
             res[i2][i1] += 0
           else:
@@ -132,11 +144,25 @@ def main(argv):
           print "%5.1f " % (100*res[mi1][mi2]/n),
         print " avgt: %7.2f maxt: %7.2f" % (1000*time_totals[mi1]/n/(len(players)-1), 1000*time_max[mi1])
       
-      #sys.stdout.write('.')
-      #sys.stdout.flush()
+      if counter>=10000:
+        n_g = (gn - n_g + 1.0 if temp==0 else float(gn - temp))
+        stats.append(str(win_ctr/n_g)+"\t"+str(turns_ctr/n_g)+"\t"+str(r_ctr/n_g)+"\t"+str(qv[0]/float(qv_ctr))+"\t"+str(loss/float(counter)))
 
+        win_ctr=turns_ctr=r_ctr=0
+        temp = gn
+
+    
+    ouput_file(game, stats)
     print res
+    
+def ouput_file(game, stats):
+    game.save_weights()
+    file = open("stats", 'w')
+    file.write("win\tturns/game\treward/game\taverage Q value\tloss\n")
+    for i in range(len(stats)):
+      file.write(stats[i])
+      file.write("\n")
+    file.close()  
 
 if __name__ == '__main__':
-    import sys
     main(sys.argv[1:])
